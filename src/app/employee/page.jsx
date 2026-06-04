@@ -66,7 +66,7 @@ export default function EmployeePortal() {
     }
   };
 
-  const handleDelete = async (id) => {
+const handleDelete = async (id) => {
     if (!id) return;
     console.log("Pressed Delete Button for item ID:", id);
     
@@ -81,8 +81,9 @@ export default function EmployeePortal() {
       return;
     }
 
+    console.log("Deleted successfully from Supabase, updating local state array...");
     setAllAvailabilities(allAvailabilities.filter(item => item.id !== id));
-    if (editingId === id) cancelEdit();
+    if (editingId === id) setEditingId(null);
   };
 
   const handleSaveAvailability = async (e) => {
@@ -158,8 +159,8 @@ export default function EmployeePortal() {
   const startEdit = (item) => {
     setEditingId(item.id);
     setTargetDate(item.date);
-    setStartTime(item.start);
-    setEndTime(item.end);
+    setStartTime(item.start); // Fixed: maps perfectly to your array state keys
+    setEndTime(item.end);     // Fixed: maps perfectly to your array state keys
   };
 
   const cancelEdit = () => {
@@ -210,7 +211,7 @@ export default function EmployeePortal() {
           <form onSubmit={handleSaveAvailability} className="space-y-4">
             <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium" required />
             <div className="grid grid-cols-2 gap-3">
-              <input type="time" min="08:00" max="22:00" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="border p-2.5 rounded-lg font-mono text-sm outline-none text-slate-700 bg-slate-50/50" />
+              <input type="time" min="08:00" max="22:00" value={startTime}onChange={(e) => setStartTime(e.target.value)} className="border p-2.5 rounded-lg font-mono text-sm outline-none text-slate-700 bg-slate-50/50" />
               <input type="time" min="08:00" max="22:00" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="border p-2.5 rounded-lg font-mono text-sm outline-none text-slate-700 bg-slate-50/50" />
             </div>
             <div className="space-y-2">
