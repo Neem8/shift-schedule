@@ -19,6 +19,7 @@ export default function EmployeePortal() {
       router.push('/');
       return;
     }
+   
     
     const resolveSessionProfile = async () => {
       const { data } = await supabase.from('employees').select('*').eq('id', verifiedEmpId).maybeSingle();
@@ -33,7 +34,23 @@ export default function EmployeePortal() {
 
     resolveSessionProfile();
   }, [router]);
+   const handleDelete = async (id) => {
+    console.log("Pressed Delete Button for item ID:", id);
+    
+    const { error } = await supabase
+      .from('availabilities')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      console.error("CRITICAL SUPABASE DELETION ERROR:", error);
+      alert(`Deletion Failed!\nMessage: ${error.message}\nCode: ${error.code}\nDetails: ${error.details}`);
+      return;
+    }
 
+    console.log("Deleted successfully from Supabase, updating local state array...");
+    setAllAvailabilities(allAvailabilities.filter(item => item.id !== id));
+  };
   const formatTimeStr = (timeString) => {
     if (!timeString) return '08:00';
     return timeString.slice(0, 5); 
@@ -138,19 +155,7 @@ export default function EmployeePortal() {
     setEndTime(item.end);
   };
 
-  const handleDelete = async (id) => {
-    const { error } = await supabase.from('availabilities').delete().eq('id', id);
-    
-    if (error) {
-      console.error("Supabase deletion error raw trace:", error);
-      alert(`Deletion Failed: ${error.message}`);
-      return;
-    }
-
-    // Remove the row from the local state array upon successful database deletion
-    setAllAvailabilities(allAvailabilities.filter(item => item.id !== id));
-    if (editingId === id) setEditingId(null);
-  };
+  
 
   const handleLogout = () => {
     sessionStorage.clear();
