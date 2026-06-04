@@ -22,6 +22,10 @@ export default function EmployeePortal() {
     
     const resolveSessionProfile = async () => {
       const { data } = await supabase.from('employees').select('*').eq('id', verifiedEmpId).maybeSingle();
+      
+      // DIAGNOSTIC LOG: Let's see what your database is returning!
+      console.log("Logged In User Profile Object:", data);
+
       if (data) {
         setCurrentEmployee(data);
         setTargetDate(new Date().toISOString().split('T')[0]);

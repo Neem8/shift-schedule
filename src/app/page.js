@@ -9,7 +9,7 @@ export default function UnifiedLoginGateway() {
   const [loginCode, setLoginCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js')
@@ -17,20 +17,14 @@ export default function UnifiedLoginGateway() {
         .catch((err) => console.warn('Service worker registration failed:', err));
     }
   }, []);
-  
+
   const handleRouteAuth = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // 1. Check for Admin Master Override Pin
-    if (loginCode === '00000') {
-      router.push('/admin/dashboard');
-      return;
-    }
-
     try {
-      // 2. Scan the database to check if the 5-digit code matches an employee
+      // Enforce direct database validation for ALL input pins
       const { data, error: dbError } = await supabase
         .from('employees')
         .select('*')
@@ -40,9 +34,15 @@ export default function UnifiedLoginGateway() {
       if (dbError) throw dbError;
 
       if (data) {
-        // Save the current verified employee session state into temporary session state
+        // Save the verified employee ID into the local session storage pipeline
         sessionStorage.setItem('authenticated_emp_id', data.id);
-        router.push('/employee');
+        
+        // Check if the verified user has administrative permissions
+        if (data.is_admin === true) {
+          router.push('/admin/dashboard');
+        } else {
+          router.push('/employee');
+        }
       } else {
         setError('Invalid authorization token. Please cross-check with your supervisor.');
       }
@@ -81,7 +81,7 @@ export default function UnifiedLoginGateway() {
           </div>
 
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2.5 text-red-700 text-xs font-semibold animate-pulse">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2.5 text-red-700 text-xs font-semibold">
               <ShieldAlert size={16} className="shrink-0" />
               <span>{error}</span>
             </div>
@@ -90,15 +90,14 @@ export default function UnifiedLoginGateway() {
           <button 
             type="submit" 
             disabled={isLoading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 transition-all duration-150 transform active:scale-[0.99] flex items-center justify-center"
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 transition-all duration-150 transform active:scale-[0.99] flex items-center justify-center text-sm"
           >
             {isLoading ? 'Verifying Link...' : 'Access Workspace'}
           </button>
         </form>
 
-        <div className="mt-8 border-t border-slate-100 pt-6 flex justify-between items-center text-xxs sm:text-xs text-slate-400 font-medium">
-          <span className="flex items-center gap-1"><Users size={14}/> Workers: Use generated PIN</span>
-          <span className="flex items-center gap-1"><Lock size={14}/> Admin Override: 00000</span>
+        <div className="mt-8 border-t border-slate-100 pt-6 flex justify-center items-center text-xs text-slate-400 font-medium">
+          <span className="flex items-center gap-1"><Users size={14}/> Enter your unique employee security code</span>
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Trash2, UserPlus, Download, AlertCircle, Calendar, UserCheck, LogOut, Clock } from 'lucide-react';
+import { Trash2, UserPlus, Download, Calendar, UserCheck, LogOut, Clock } from 'lucide-react';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -106,11 +106,9 @@ export default function AdminDashboard() {
     router.push('/');
   };
 
-  // Navigates an admin user back to input times, creating a default session if needed
   const handleGoToEmployeeInput = () => {
     const activeEmpId = sessionStorage.getItem('authenticated_emp_id');
     if (!activeEmpId && employees.length > 0) {
-      // Fallback: Use the first employee found if they skipped the gateway path
       sessionStorage.setItem('authenticated_emp_id', employees[0].id);
     }
     router.push('/employee');
@@ -161,6 +159,7 @@ export default function AdminDashboard() {
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Shift Manager Dashboard</h1>
           <p className="text-sm text-slate-500 mt-1">Operational Hours: 8:00 AM - 10:00 PM</p>
         </div>
+        
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
           <div className="flex items-center gap-2 bg-white px-3 py-2.5 rounded-xl border border-slate-200 shadow-sm justify-between">
             <div className="flex items-center gap-2">
@@ -169,6 +168,7 @@ export default function AdminDashboard() {
             </div>
             <input type="date" value={selectedWeekStart} onChange={(e) => setSelectedWeekStart(e.target.value)} className="text-xs sm:text-sm font-bold bg-transparent outline-none text-slate-800" />
           </div>
+          
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
             <button onClick={exportPDF} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm">
               <Download size={16} /> Export PDF
