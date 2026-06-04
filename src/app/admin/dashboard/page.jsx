@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Trash2, UserPlus, Download, Calendar, UserCheck, LogOut, Clock } from 'lucide-react';
+import { Trash2, UserPlus, Download, Calendar, UserCheck, LogOut, Clock, X } from 'lucide-react';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -13,6 +13,18 @@ export default function AdminDashboard() {
   const [schedule, setSchedule] = useState([]);
   const [availabilities, setAvailabilities] = useState([]);
   const [selectedWeekStart, setSelectedWeekStart] = useState('');
+
+  // State for managing the assignment configuration modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentAssignment, setCurrentAssignment] = useState({
+    date: '',
+    employeeId: '',
+    employeeName: '',
+    availStart: '',
+    availEnd: '',
+    shiftStart: '',
+    shiftEnd: '',
+  });
 
   useEffect(() => {
     setSelectedWeekStart(new Date().toISOString().split('T')[0]);
@@ -74,16 +86,59 @@ export default function AdminDashboard() {
     }
   };
 
-  const assignShift = async (date, employeeId, start, end) => {
-    await supabase.from('shifts').delete().eq('date', date).eq('start_time', start).eq('end_time', end);
+  const openAssignmentModal = (date, workerProfile, availability) => {
+    // Find if they already have an existing shift assigned for this day to pre-populate custom times
+    const existingShift = schedule.find(s => s.date === date && s.employeeId === workerProfile.id);
+
+    setCurrentAssignment({
+      date,
+      employeeId: workerProfile.id,
+      employeeName: workerProfile.name,
+      availStart: availability.start,
+      availEnd: availability.end,
+      shiftStart: existingShift ? existingShift.start : availability.start, 
+      shiftEnd: existingShift ? existingShift.end : availability.end,     
+    });
+    setIsModalOpen(true);
+  };
+
+  const closeAssignmentModal = () => {
+    setIsModalOpen(false);
+    setCurrentAssignment({
+      date: '',
+      employeeId: '',
+      employeeName: '',
+      availStart: '',
+      availEnd: '',
+      shiftStart: '',
+      shiftEnd: '',
+    });
+  };
+
+  const handleConfirmAssignment = async () => {
+    const { date, employeeId, shiftStart, shiftEnd, availStart, availEnd } = currentAssignment;
+
+    if (shiftStart < availStart || shiftEnd > availEnd) {
+      return alert("Assigned shift times must fall within the employee's submitted availability window.");
+    }
+    if (shiftStart >= shiftEnd) {
+      return alert("Shift start time must be before the end time.");
+    }
+
+    // Delete any previous allocations for this employee on this calendar date block
+    await supabase.from('shifts').delete().eq('date', date).eq('employee_id', employeeId);
+
     const { data, error } = await supabase.from('shifts').insert([
-      { employee_id: employeeId, date: date, start_time: start, end_time: end }
+      { employee_id: employeeId, date: date, start_time: shiftStart, end_time: shiftEnd }
     ]).select();
 
     if (!error && data) {
-      const cleanNewShift = { id: data[0].id, date, employeeId, start, end };
-      const filtered = schedule.filter(s => !(s.date === date && s.start === start && s.end === end));
-      setSchedule([...filtered, cleanNewShift]);
+      const cleanNewShift = { id: data[0].id, date, employeeId, start: shiftStart, end: shiftEnd };
+      const filteredSchedule = schedule.filter(s => !(s.date === date && s.employeeId === employeeId));
+      setSchedule([...filteredSchedule, cleanNewShift]);
+      closeAssignmentModal();
+    } else {
+      alert("Failed to assign shift. Please try again.");
     }
   };
 
@@ -152,8 +207,62 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8 bg-gray-50 min-h-screen text-slate-800">
-      {/* Header Panel Layout */}
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8 bg-gray-50 min-h-screen text-slate-800 relative">
+      {/* Assignment Modal */}
+      {isModalOpen && (
+        <div className="fixed top-0 left-0 right-0 bottom-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl max-w-lg w-full border border-slate-100 space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <h3 className="text-xl font-bold text-slate-950">Assign Shift: {currentAssignment.employeeName}</h3>
+              <button onClick={closeAssignmentModal} className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-slate-100">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <p className="text-sm text-slate-600">
+              Submitted availability for <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">{new Date(currentAssignment.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>:
+              <br />
+              <span className="font-mono font-bold text-slate-800">{convertTo12Hour(currentAssignment.availStart)} - {convertTo12Hour(currentAssignment.availEnd)}</span>
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Shift Start Time</label>
+                <input 
+                  type="time" 
+                  min={currentAssignment.availStart} 
+                  max={currentAssignment.availEnd}
+                  value={currentAssignment.shiftStart}
+                  onChange={(e) => setCurrentAssignment({...currentAssignment, shiftStart: e.target.value})}
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 font-medium font-mono" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Shift End Time</label>
+                <input 
+                  type="time" 
+                  min={currentAssignment.availStart}
+                  max={currentAssignment.availEnd} 
+                  value={currentAssignment.shiftEnd}
+                  onChange={(e) => setCurrentAssignment({...currentAssignment, shiftEnd: e.target.value})}
+                  className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 font-medium font-mono" 
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-100">
+              <button onClick={handleConfirmAssignment} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-blue-500/20 transition text-sm">
+                Confirm Assignment
+              </button>
+              <button onClick={closeAssignmentModal} className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 px-6 rounded-xl transition text-sm">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header Container */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-200 pb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Shift Manager Dashboard</h1>
@@ -212,7 +321,7 @@ export default function AdminDashboard() {
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
             <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-1">Pending Time Submissions</h2>
-            <p className="text-xs text-slate-400 mb-4">Click to assign staff members who have submitted availability.</p>
+            <p className="text-xs text-slate-400 mb-4">Review requested windows and configure tailored shift times.</p>
             <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
               {currentWeekDates.map(dateStr => {
                 const entriesOnThisDay = availabilities.filter(a => a.date === dateStr).sort((a, b) => a.start.localeCompare(b.start));
@@ -226,16 +335,29 @@ export default function AdminDashboard() {
                       {entriesOnThisDay.map(avail => {
                         const workerProfile = employees.find(e => e.id === avail.employeeId);
                         if (!workerProfile) return null;
-                        const isAssigned = schedule.some(s => s.date === dateStr && s.employeeId === workerProfile.id && s.start === avail.start && s.end === avail.end);
+
+                        // FIXED LOGIC: Match by employee ID and date to keep it visible in pending even if hours are shorter
+                        const assignedShift = schedule.find(s => s.date === dateStr && s.employeeId === workerProfile.id);
 
                         return (
                           <div key={avail.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-xs">
                             <div className="min-w-0 pr-2">
                               <p className="text-xs sm:text-sm font-bold text-slate-800 truncate">{workerProfile.name}</p>
-                              <p className="text-xxs font-mono text-slate-400 mt-0.5">{convertTo12Hour(avail.start)} - {convertTo12Hour(avail.end)}</p>
+                              <p className="text-xxs font-mono text-slate-400 mt-0.5">Avail: {convertTo12Hour(avail.start)} - {convertTo12Hour(avail.end)}</p>
+                              
+                              {/* Display specific custom shift details dynamically under their requested profile */}
+                              {assignedShift && (
+                                <p className="text-xxs font-bold text-green-600 flex items-center gap-0.5 mt-0.5">
+                                  ● Assigned: {convertTo12Hour(assignedShift.start)} - {convertTo12Hour(assignedShift.end)}
+                                </p>
+                              )}
                             </div>
-                            <button onClick={() => assignShift(dateStr, workerProfile.id, avail.start, avail.end)} className={`text-xxs px-3 py-2 rounded-lg font-extrabold flex items-center gap-1 transition ${isAssigned ? 'bg-green-600 text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
-                              {isAssigned ? <><UserCheck size={12}/> Active</> : 'Assign'}
+                            
+                            <button 
+                              onClick={() => openAssignmentModal(dateStr, workerProfile, avail)} 
+                              className={`text-xxs px-3 py-2 rounded-lg font-extrabold flex items-center gap-1 transition ${assignedShift ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                            >
+                              {assignedShift ? <><UserCheck size={12}/> Edit Shift</> : 'Assign'}
                             </button>
                           </div>
                         );
@@ -247,7 +369,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Master Table */}
+          {/* Master Roster Table */}
           <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
             <h3 className="font-bold text-slate-900 mb-3 text-base sm:text-lg">Active Scheduled Roster</h3>
             <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
