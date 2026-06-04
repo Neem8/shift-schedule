@@ -57,7 +57,11 @@ export default function EmployeePortal() {
 
     if (data) {
       setAllAvailabilities(data.map(item => ({
-        id: item.id, employeeId: item.employee_id, date: item.date, start: formatTimeStr(item.start_time), end: formatTimeStr(item.end_time)
+        id: item.id, 
+        employeeId: item.employee_id, 
+        date: item.date, 
+        start: formatTimeStr(item.start_time), 
+        end: formatTimeStr(item.end_time)
       })));
     }
   };
@@ -65,8 +69,10 @@ export default function EmployeePortal() {
   const handleSaveAvailability = async (e) => {
     e.preventDefault();
     if (!targetDate) return alert('Please select a valid calendar date.');
+    if (startTime >= endTime) return alert('Start time must be strictly before end time.');
 
     if (editingId) {
+      // 1. Standard Update Pathway (Manual Edit Mode)
       const { error } = await supabase
         .from('availabilities')
         .update({ date: targetDate, start_time: startTime, end_time: endTime })
@@ -79,17 +85,47 @@ export default function EmployeePortal() {
         setEditingId(null);
       }
     } else {
-      const { data, error } = await supabase
-        .from('availabilities')
-        .insert([{ employee_id: currentEmployee.id, date: targetDate, start_time: startTime, end_time: endTime }])
-        .select();
+      // 2. Intelligent Auto-Merging Selection Checking Pathway
+      const existingDuplicate = allAvailabilities.find(a => a.date === targetDate);
 
-      if (!error && data) {
-        const newItem = { id: data[0].id, employeeId: currentEmployee.id, date: targetDate, start: formatTimeStr(data[0].start_time), end: formatTimeStr(data[0].end_time) };
-        setAllAvailabilities([...allAvailabilities, newItem].sort((a, b) => new Date(a.date) - new Date(b.date)));
+      if (existingDuplicate) {
+        // Calculate the absolute minimum start time and maximum end time
+        const mergedStart = startTime < existingDuplicate.start ? startTime : existingDuplicate.start;
+        const mergedEnd = endTime > existingDuplicate.end ? endTime : existingDuplicate.end;
+
+        const { error } = await supabase
+          .from('availabilities')
+          .update({ start_time: mergedStart, end_time: mergedEnd })
+          .eq('id', existingDuplicate.id);
+
+        if (!error) {
+          setAllAvailabilities(allAvailabilities.map(item => 
+            item.id === existingDuplicate.id ? { ...item, start: mergedStart, end: mergedEnd } : item
+          ));
+        } else {
+          alert('Database merge error encountered.');
+        }
+      } else {
+        // Create an entirely new entry if no entries exist for that date
+        const { data, error } = await supabase
+          .from('availabilities')
+          .insert([{ employee_id: currentEmployee.id, date: targetDate, start_time: startTime, end_time: endTime }])
+          .select();
+
+        if (!error && data && data.length > 0) {
+          const newItem = { 
+            id: data[0].id, // Safely mapping the generated Supabase UUID
+            employeeId: currentEmployee.id, 
+            date: targetDate, 
+            start: formatTimeStr(data[0].start_time), 
+            end: formatTimeStr(data[0].end_time) 
+          };
+          setAllAvailabilities([...allAvailabilities, newItem].sort((a, b) => new Date(a.date) - new Date(b.date)));
+        }
       }
     }
 
+    // Reset inputs
     setStartTime('08:00');
     setEndTime('16:00');
     setTargetDate(new Date().toISOString().split('T')[0]);
@@ -104,10 +140,16 @@ export default function EmployeePortal() {
 
   const handleDelete = async (id) => {
     const { error } = await supabase.from('availabilities').delete().eq('id', id);
-    if (!error) {
-      setAllAvailabilities(allAvailabilities.filter(item => item.id !== id));
-      if (editingId === id) setEditingId(null);
+    
+    if (error) {
+      console.error("Supabase deletion error raw trace:", error);
+      alert(`Deletion Failed: ${error.message}`);
+      return;
     }
+
+    // Remove the row from the local state array upon successful database deletion
+    setAllAvailabilities(allAvailabilities.filter(item => item.id !== id));
+    if (editingId === id) setEditingId(null);
   };
 
   const handleLogout = () => {
@@ -131,15 +173,10 @@ export default function EmployeePortal() {
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">Submit availability windows for specific calendar dates.</p>
         </div>
-        
-        {/* Navigation Action Hub */}
         <div className="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
           {currentEmployee.is_admin && (
-            <button 
-              onClick={() => router.push('/admin/dashboard')} 
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition w-full sm:w-auto shadow-sm shadow-blue-500/10"
-            >
-              <ShieldCheck size={16} /> Go to Admin Dashboard
+            <button onClick={() => router.push('/admin/dashboard')} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition w-full sm:w-auto shadow-sm">
+              Go to Admin Dashboard
             </button>
           )}
           <button onClick={handleLogout} className="flex items-center justify-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition w-full sm:w-auto">
@@ -149,7 +186,6 @@ export default function EmployeePortal() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-        {/* Input Form Module */}
         <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm h-fit">
           <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2"><CalendarPlus size={18} className="text-blue-600" /> Availability</h3>
           <form onSubmit={handleSaveAvailability} className="space-y-4">
@@ -159,13 +195,14 @@ export default function EmployeePortal() {
               <input type="time" min="08:00" max="22:00" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="border p-2.5 rounded-lg font-mono text-sm outline-none text-slate-700 bg-slate-50/50" />
             </div>
             <div className="space-y-2">
-              <button type="submit" className={`w-full text-white font-bold py-3 rounded-xl shadow-sm text-sm ${editingId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Save Availability</button>
+              <button type="submit" className={`w-full text-white font-bold py-3 rounded-xl shadow-sm text-sm ${editingId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                {editingId ? 'Update View' : 'Save Availability'}
+              </button>
               {editingId && <button type="button" onClick={() => setEditingId(null)} className="w-full bg-slate-100 text-slate-600 font-bold py-2 rounded-xl text-xs">Cancel</button>}
             </div>
           </form>
         </div>
 
-        {/* List Matrix Display Panel */}
         <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-4">Your Logged Timeline Parameters</h3>
           <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
@@ -179,8 +216,8 @@ export default function EmployeePortal() {
                     <td className="p-4 font-semibold text-slate-800">{item.date}</td>
                     <td className="p-4 font-mono text-xs text-slate-500">{convertTo12Hour(item.start)} - {convertTo12Hour(item.end)}</td>
                     <td className="p-4 text-right">
-                      <button onClick={() => startEdit(item)} className="p-2 text-slate-400 hover:text-amber-600"><Edit2 size={14} /></button>
-                      <button onClick={() => handleDelete(item.id)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={14} /></button>
+                      <button onClick={() => startEdit(item)} className="p-2 text-gray-500 hover:text-amber-600"><Edit2 size={14} /></button>
+                      <button onClick={() => handleDelete(item.id)} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={14} /></button>
                     </td>
                   </tr>
                 ))}
