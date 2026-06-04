@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Check, Clock, CalendarPlus, Trash2, Edit2, X, LogOut } from 'lucide-react';
+import { Check, Clock, CalendarPlus, Trash2, Edit2, X, LogOut, ShieldCheck } from 'lucide-react';
 
 export default function EmployeePortal() {
   const router = useRouter();
@@ -14,7 +14,6 @@ export default function EmployeePortal() {
   const [allAvailabilities, setAllAvailabilities] = useState([]);
 
   useEffect(() => {
-    // Read local browser session values to verify authorization status
     const verifiedEmpId = sessionStorage.getItem('authenticated_emp_id');
     if (!verifiedEmpId) {
       router.push('/');
@@ -96,6 +95,21 @@ export default function EmployeePortal() {
     setTargetDate(new Date().toISOString().split('T')[0]);
   };
 
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setTargetDate(item.date);
+    setStartTime(item.start);
+    setEndTime(item.end);
+  };
+
+  const handleDelete = async (id) => {
+    const { error } = await supabase.from('availabilities').delete().eq('id', id);
+    if (!error) {
+      setAllAvailabilities(allAvailabilities.filter(item => item.id !== id));
+      if (editingId === id) setEditingId(null);
+    }
+  };
+
   const handleLogout = () => {
     sessionStorage.clear();
     router.push('/');
@@ -105,22 +119,39 @@ export default function EmployeePortal() {
 
   return (
     <div className="p-4 sm:p-8 max-w-5xl mx-auto space-y-6 sm:space-y-8 bg-gray-50 min-h-screen text-slate-800">
-      <div className="border-b border-slate-200 pb-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="border-b border-slate-200 pb-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Welcome, {currentEmployee.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Welcome, {currentEmployee.name}</h1>
+            {currentEmployee.is_admin && (
+              <span className="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1 shrink-0">
+                <ShieldCheck size={14} /> Admin
+              </span>
+            )}
+          </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">Submit availability windows for specific calendar dates.</p>
         </div>
-        <button onClick={handleLogout} className="flex items-center justify-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition w-full sm:w-auto">
-          <LogOut size={16} /> Logout
-        </button>
+        
+        {/* Navigation Action Hub */}
+        <div className="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
+          {currentEmployee.is_admin && (
+            <button 
+              onClick={() => router.push('/admin/dashboard')} 
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition w-full sm:w-auto shadow-sm shadow-blue-500/10"
+            >
+              <ShieldCheck size={16} /> Go to Admin Dashboard
+            </button>
+          )}
+          <button onClick={handleLogout} className="flex items-center justify-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition w-full sm:w-auto">
+            <LogOut size={16} /> Logout
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
+        {/* Input Form Module */}
         <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm h-fit">
-          <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <CalendarPlus size={18} className="text-blue-600" />
-            {editingId ? 'Modify Record' : 'Log New Window'}
-          </h3>
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-4 flex items-center gap-2"><CalendarPlus size={18} className="text-blue-600" /> Availability</h3>
           <form onSubmit={handleSaveAvailability} className="space-y-4">
             <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50/50 font-medium" required />
             <div className="grid grid-cols-2 gap-3">
@@ -134,10 +165,11 @@ export default function EmployeePortal() {
           </form>
         </div>
 
+        {/* List Matrix Display Panel */}
         <div className="lg:col-span-2 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-4">Your Logged Timeline Parameters</h3>
           <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-100">
+            <table className="w-full text-left border-collapse min-w-[400px]">
               <thead>
                 <tr className="bg-slate-50 text-xxs font-bold text-slate-400 uppercase tracking-wider border-b"><th className="p-4">Calendar Date</th><th className="p-4">Available Window</th><th className="p-4 text-right">Actions</th></tr>
               </thead>

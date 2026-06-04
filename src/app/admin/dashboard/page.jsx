@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Trash2, UserPlus, Download, AlertCircle, Calendar, UserCheck, LogOut, Menu, X } from 'lucide-react';
+import { Trash2, UserPlus, Download, AlertCircle, Calendar, UserCheck, LogOut, Clock } from 'lucide-react';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -106,6 +106,16 @@ export default function AdminDashboard() {
     router.push('/');
   };
 
+  // Navigates an admin user back to input times, creating a default session if needed
+  const handleGoToEmployeeInput = () => {
+    const activeEmpId = sessionStorage.getItem('authenticated_emp_id');
+    if (!activeEmpId && employees.length > 0) {
+      // Fallback: Use the first employee found if they skipped the gateway path
+      sessionStorage.setItem('authenticated_emp_id', employees[0].id);
+    }
+    router.push('/employee');
+  };
+
   const exportPDF = () => {
     const doc = new jsPDF();
     doc.text(`Store Shift Schedule (Week of ${selectedWeekStart})`, 14, 15);
@@ -145,7 +155,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8 bg-gray-50 min-h-screen text-slate-800">
-      {/* Header Container */}
+      {/* Header Panel Layout */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-200 pb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Shift Manager Dashboard</h1>
@@ -159,9 +169,12 @@ export default function AdminDashboard() {
             </div>
             <input type="date" value={selectedWeekStart} onChange={(e) => setSelectedWeekStart(e.target.value)} className="text-xs sm:text-sm font-bold bg-transparent outline-none text-slate-800" />
           </div>
-          <div className="grid grid-cols-2 sm:flex items-center gap-2.5 w-full">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
             <button onClick={exportPDF} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm">
               <Download size={16} /> Export PDF
+            </button>
+            <button onClick={handleGoToEmployeeInput} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm">
+              <Clock size={16} /> Add Time (Portal View)
             </button>
             <button onClick={handleLogout} className="flex items-center justify-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition">
               <LogOut size={16} /> Logout
@@ -171,7 +184,7 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-        {/* Roster Controls */}
+        {/* Roster Panel */}
         <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
           <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
             <UserPlus size={20} className="text-blue-600" /> Team Roster ({employees.length})
@@ -180,7 +193,7 @@ export default function AdminDashboard() {
             <input type="text" placeholder="Full Name" value={newEmployeeName} onChange={(e) => setNewEmployeeName(e.target.value)} className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm w-full outline-none text-slate-800 focus:ring-2 focus:ring-blue-500 bg-slate-50/50" />
             <button type="submit" className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition">Add</button>
           </form>
-          <div className="space-y-2 max-h-62.5 lg:max-h-87.5 overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-[250px] lg:max-h-[350px] overflow-y-auto pr-1">
             {employees.map(emp => (
               <div key={emp.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <div className="min-w-0">
@@ -195,12 +208,12 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Dynamic Matrix Container */}
+        {/* Dynamic Allocation Grid */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
             <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-1">Pending Time Submissions</h2>
             <p className="text-xs text-slate-400 mb-4">Click to assign staff members who have submitted availability.</p>
-            <div className="space-y-4 max-h-100 overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
               {currentWeekDates.map(dateStr => {
                 const entriesOnThisDay = availabilities.filter(a => a.date === dateStr).sort((a, b) => a.start.localeCompare(b.start));
                 const displayDayLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -234,11 +247,11 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Active Live Grid Table */}
+          {/* Master Table */}
           <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
             <h3 className="font-bold text-slate-900 mb-3 text-base sm:text-lg">Active Scheduled Roster</h3>
             <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-125">
+              <table className="w-full text-left border-collapse min-w-[500px]">
                 <thead>
                   <tr className="bg-slate-50 text-xxs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200">
                     <th className="p-3 sm:p-4">Calendar Date</th>
